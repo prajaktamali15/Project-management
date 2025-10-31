@@ -40,4 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/src/generated/prisma
+# Generated Prisma client (committing for reproducible builds in this repo)
+# Note: Typically ignored; included per user requirement.
+# /src/generated/prisma

@@ -1,0 +1,605 @@
+<script src="https://cdn.freecodecamp.org/testable-projects-fcc/v1/bundle.js"></script>
+
+<html>
+<style>
+  @import url("https://fonts.googleapis.com/css?family=Montserrat");
+
+@import url("https://fonts.googleapis.com/css?family=Chivo:300,300i,400,400i,700,700i,900,900i|Saira+Extra+Condensed:100,200,300,400,500,600,700,800|Saira:100,200,300,400,500,600,700,800");
+
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap");
+
+// Text Styles
+@import url("https://fonts.googleapis.com/css?family=Open+Sans:400,400i,700");
+$font-sans: "Open Sans", sans-serif;
+
+@font-title: 'Saira', sans-serif;
+
+// Colors
+$black: #34435e;
+$white: #ffffff;
+
+body {
+  font-family: $font-sans;
+  /*   margin: 0;
+  padding: 0 0; */
+}
+
+.timeline {
+  width: 30%;
+  height: 100%;
+  position: absolute;
+  /*   padding: auto; */
+  z-index: -1;
+  justify-items: center;
+  align-items: center;
+  overflow-x: hidden;
+  /*   overflow: scroll; */
+  text-align: center;
+
+  top: 0;
+  left: 0;
+
+  background-color: white;
+  font-family: "Montserrat", sans-serif;
+
+  flex-direction: column;
+}
+
+.timeline::after {
+  height: 3300px;
+  content: "";
+  position: absolute;
+  width: 6px;
+  background-color: #00203fff;
+  top: 0;
+  bottom: 0;
+  left: 35px;
+  margin-top: 135px;
+}
+
+.container {
+  text-align: left;
+  padding: 10px 40px;
+  position: relative;
+  background-color: inherit;
+  width: 100%;
+}
+
+.container::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background-color: #00203fff;
+  /* Color inside of circle */
+  border: 4px solid grey;
+  /* Color of circle border*/
+  top: 45px;
+  border-radius: 50%;
+  z-index: 1;
+}
+
+.left {
+  left: 10px;
+}
+
+/* Place the container to the right */
+.right {
+  left: 50%;
+}
+
+.left::after,
+.right::after {
+  left: 15px;
+}
+
+/* Add arrows to the left container (pointing right) */
+
+.right::after {
+  left: -16px;
+}
+
+/* The actual content */
+.content {
+  width: 70%;
+  padding: 20px 30px;
+  background-color: white;
+  position: relative;
+  border-radius: 6px;
+}
+
+#timeline-header {
+  margin-top: 70px;
+  color: black;
+  font-family: @font-title;
+  letter-spacing: 1.5px;
+  font-weight: 100;
+  font-size: 2.6em;
+}
+
+.main-content {
+  height: 100%;
+  width: 70%;
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  overflow-x: hidden;
+  padding-top: 20px;
+  right: 0;
+  background-color: #00203fff;
+}
+
+.bio {
+  margin-left: 50px;
+  height: 90%;
+  width: 80%;
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+}
+
+#image {
+  max-height: 325px;
+  max-width: 325px;
+  border-radius: 50%;
+  display: block;
+}
+
+#title {
+  margin-left: 20px;
+  margin-top: 80x;
+}
+
+h1 {
+  font-weight: 400;
+  font-family: "Montserrat";
+  font-size: 48px;
+  color: white;
+}
+
+#tribute-info {
+  min-width: 50px;
+  max-width: 500px;
+  font-size: 15px;
+  margin-left: 20px;
+  margin-top: 80x;
+}
+
+#img-caption {
+  min-width: 50px;
+  max-width: 500px;
+  font-size: 15px;
+  text-align: center;
+  color: white;
+}
+
+#tribute-link {
+  display: block;
+  min-height: 50px;
+  min-width: 180px;
+  text-decoration: none;
+  font-size: 15px;
+  color: #fff;
+  background: #e74c3c;
+  width: 50%;
+  text-align: center;
+  padding: 1rem 2rem;
+  margin-top: 1rem;
+  margin-left: 20px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.centered-element {
+  height: 100px;
+  width: 100px;
+  position: absolute;
+  left: 50%;
+  margin-left: -50px;
+  top: 50%;
+  margin-top: -50px;
+}
+
+#main {
+}
+
+/* SMALL SMALL SMALL */
+
+.main-content-small {
+  height: 900px;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  overflow-x: hidden;
+  padding-top: 20px;
+  right: 0;
+  background-color: #00203fff;
+}
+
+.bio-small {
+  /*   margin-left: 50px; */
+
+  /*   height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: top;
+  justify-items: center;
+  flex-direction: row; */
+}
+
+#image-small {
+  max-height: 325px;
+  max-width: 325px;
+  border-radius: 50%;
+  display: block;
+  margin: 0 auto;
+}
+
+#title-small {
+  text-align: center;
+  /*   margin-left: 20px; */
+  margin-top: 80x;
+}
+
+.h1-small {
+  font-weight: 400;
+  font-family: "Montserrat";
+  font-size: 48px;
+  color: white;
+}
+
+#tribute-info-small {
+  display: block;
+  margin: 0 auto;
+  text-align: center;
+  min-width: 50px;
+  max-width: 500px;
+  font-size: 15px;
+  padding-top: 35px;
+  padding-bottom: 20px;
+  padding-left: 30px;
+  padding-right: 30px;
+}
+
+#img-caption-small {
+  min-width: 50px;
+  max-width: 500px;
+  font-size: 18px;
+  text-align: center;
+  color: white;
+  padding-top: 20px;
+  margin: 0 auto;
+}
+
+#tribute-link-small {
+  display: block;
+  min-height: 50px;
+  min-width: 180px;
+  text-decoration: none;
+  font-size: 15px;
+  color: #fff;
+  background: #e74c3c;
+  width: 50%;
+  text-align: center;
+  padding: 1rem 2rem;
+  margin: 0 auto;
+  border-radius: 3px;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.timeline-small {
+  width: 100%;
+  margin-top: 900px;
+  position: absolute;
+  /*   padding: auto; */
+  z-index: -1;
+  justify-items: center;
+  align-items: center;
+  overflow-x: hidden;
+  overflow: hidden;
+  /*   overflow: scroll; */
+  text-align: center;
+
+  top: 0;
+  left: 0;
+
+  background-color: white;
+  font-family: "Montserrat", sans-serif;
+
+  flex-direction: column;
+}
+
+.timeline-small::after {
+  content: "";
+  position: absolute;
+  width: 6px;
+  background-color: #00203fff;
+  top: 0;
+  bottom: 0;
+  left: 35px;
+  margin-top: 135px;
+}
+
+#timeline-header-small {
+  margin-top: 70px;
+  color: black;
+  font-family: @font-title;
+  letter-spacing: 1.5px;
+  font-weight: 100;
+  font-size: 2.6em;
+}
+
+#small {
+  display: none;
+}
+
+/* RESPONSIVE WEB DESIGN */
+
+@media screen and (max-width: 1050px) {
+  #small {
+    display: inline-block;
+  }
+  #big {
+    display: none;
+  }
+}
+
+</style>
+<main>
+
+  <body id="main">
+    <div id="big">
+      <section class="timeline">
+        <h1 id="timeline-header">Timeline</h1>
+
+        <div class="container left">
+          <div class="content">
+            <h2>1971</h2>
+            <p>Elon Musk is born in South Africa to an engineer father and a model mother.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>1983</h2>
+            <p>Writes first video game called Blastar; sells for $500.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>1995-1991</h2>
+            <p>Attends college at Queen’s University in Kingston, Ontario. Then transfers to the University of Pennsylvania; completed a BS in Economics (Wharton) and a BA with a major in physics</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>1995</h2>
+            <p> Moves to Silicon Valley; defers graduate program in applied physics and materials science at Stanford University to join the Internet boom</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>1999</h2>
+            <p>Sells Zip2 to Compaq, the personal computer company, for $307 million, of which $22 million went to Musk. Then forms X.com, which in 2000 morphs into PayPal</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>July 2002</h2>
+            <p> eBay acquires PayPal for $1.5 billion in stock, of which $165 million goes to Musk</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>May 2002</h2>
+            <p>Founds SpaceX to design, manufacture and launche advanced rockets and spacecraft.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>2004</h2>
+            <p>Invests several millions into Tesla Motors</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>2007</h2>
+            <p>SpaceX wins $1.6 billion contract to bring cargo to the International Space Station</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>October 2008</h2>
+            <p>Becomes Tesla’s CEO</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>June 29, 2010</h2>
+            <p>Tesla IPO</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>May 2012</h2>
+            <p>SpaceX becomes the first commercial vehicle to deliver a load of supplies to the International Space Station.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>June 2012</h2>
+            <p>Tesla begins deliveries of the all-electric Model S.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>August 2013</h2>
+            <p>Releases sketch and concept of the Hyperloop</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>2017</h2>
+            <p>Tesla releases the Model 3. A cheaper version of the previous Model S and X.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>May 30, 2020</h2>
+            <p>SpaceX successfully launches 2 astronauts into space on the Crew Dragon in order to dock with the ISS.</p>
+          </div>
+        </div>
+
+      </section>
+      <div class="main-content">
+        <div class="bio">
+          <div id="img-div">
+            <img id="image" src="https://cdn.geekwire.com/wp-content/uploads/2014/09/elonmusk-620x620.jpeg" alt="Elon Musk.">
+            <h1 id="img-caption"> Elon @ SpaceX</h1>
+          </div>
+          <div class="info">
+            <h1 id="title"> Elon Musk<h1>
+                <p id="tribute-info"> Elon Musk is a South African-born American entrepreneur and businessman who founded X.com in 1999 (which later became PayPal), SpaceX in 2002 and Tesla Motors in 2003. Musk became a multimillionaire in his late 20s when he sold his start-up company, Zip2, to a division of Compaq Computers. He has an estimated net-worth of around 59.2 billion dollars and is listed as the 16th richest person in the world according to Forbes. His ultimate goal is to make life multiplanentary and help humanity explore beyond Earth.</p>
+                <a id="tribute-link" href="https://en.wikipedia.org/wiki/Elon_Musk" target="_blank"> Read More</a>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- small split -->
+
+    <div id="small">
+      <div class="main-content-small">
+        <div class="bio-small">
+          <h1 id="title-small"> Elon Musk<h1>
+              <div id="img-div">
+                <img id="image-small" src="https://cdn.geekwire.com/wp-content/uploads/2014/09/elonmusk-620x620.jpeg" alt="Elon Musk.">
+                <h1 id="img-caption-small" class="h1-small"> Elon @ SpaceX</h1>
+              </div>
+              <div class="info">
+                <p id="tribute-info-small" class="h1-small"> Elon Musk is a South African-born American entrepreneur and businessman who founded X.com in 1999 (which later became PayPal), SpaceX in 2002 and Tesla Motors in 2003. Musk became a multimillionaire in his late 20s when he sold his start-up company, Zip2, to a division of Compaq Computers. He has an estimated net-worth of around 59.2 billion dollars and is listed as the 16th richest person in the world according to Forbes. His ultimate goal is to make life multiplanentary and help humanity explore beyond Earth.</p>
+                <a id="tribute-link-small" href="https://en.wikipedia.org/wiki/Elon_Musk" target="_blank" class="h1-small"> Read More</a>
+              </div>
+
+        </div>
+      </div>
+
+      <div class="timeline-small">
+        <h1 id="timeline-header-small">Timeline</h1>
+
+        <div class="container left">
+          <div class="content">
+            <h2>1971</h2>
+            <p>Elon Musk is born in South Africa to an engineer father and a model mother.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>1983</h2>
+            <p>Writes first video game called Blastar; sells for $500.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>1995-1991</h2>
+            <p>Attends college at Queen’s University in Kingston, Ontario. Then transfers to the University of Pennsylvania; completed a BS in Economics (Wharton) and a BA with a major in physics</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>1995</h2>
+            <p> Moves to Silicon Valley; defers graduate program in applied physics and materials science at Stanford University to join the Internet boom</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>1999</h2>
+            <p>Sells Zip2 to Compaq, the personal computer company, for $307 million, of which $22 million went to Musk. Then forms X.com, which in 2000 morphs into PayPal</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>July 2002</h2>
+            <p> eBay acquires PayPal for $1.5 billion in stock, of which $165 million goes to Musk</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>May 2002</h2>
+            <p>Founds SpaceX to design, manufacture and launche advanced rockets and spacecraft.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>2004</h2>
+            <p>Invests several millions into Tesla Motors</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>2007</h2>
+            <p>SpaceX wins $1.6 billion contract to bring cargo to the International Space Station</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>October 2008</h2>
+            <p>Becomes Tesla’s CEO</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>June 29, 2010</h2>
+            <p>Tesla IPO</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>May 2012</h2>
+            <p>SpaceX becomes the first commercial vehicle to deliver a load of supplies to the International Space Station.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>June 2012</h2>
+            <p>Tesla begins deliveries of the all-electric Model S.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>August 2013</h2>
+            <p>Releases sketch and concept of the Hyperloop</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>2017</h2>
+            <p>Tesla releases the Model 3. A cheaper version of the previous Model S and X.</p>
+          </div>
+        </div>
+        <div class="container left">
+          <div class="content">
+            <h2>May 30, 2020</h2>
+            <p>SpaceX successfully launches 2 astronauts into space on the Crew Dragon in order to dock with the ISS.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <body>
+</main>
+<html>
+<!-- 
+
+Hello Camper!
+
+For now, the test suite only works in Chrome! Please read the README below in the JS Editor before beginning. Feel free to delete this message once you have read it. Good luck and Happy Coding! 
+
+- The freeCodeCamp Team 
+
+-->

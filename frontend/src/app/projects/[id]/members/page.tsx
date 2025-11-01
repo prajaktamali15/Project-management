@@ -42,6 +42,9 @@ export default function ProjectMembersPage() {
 	const [inviteEmail, setInviteEmail] = useState("");
 	const [inviteRole, setInviteRole] = useState<"ADMIN" | "MEMBER" | "VIEWER">("MEMBER");
 	const [inviting, setInviting] = useState(false);
+	const [canManage, setCanManage] = useState(false);
+	const [editingRole, setEditingRole] = useState<string | null>(null);
+	const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
 	async function loadMembers() {
 		try {
@@ -49,6 +52,21 @@ export default function ProjectMembersPage() {
 			const data = await apiFetch<{ members: Member[] }>(`/api/projects/${projectId}/members`);
 			setMembers(data.members);
 			setError(null);
+			
+			// Check if current user can manage members
+			const userStr = localStorage.getItem("user");
+			if (userStr) {
+				const user = JSON.parse(userStr);
+				setCurrentUserId(user.id);
+				
+				// Check if user is workspace owner or project admin
+				try {
+					const project = await apiFetch<{ project: { workspaceId: string; workspace?: { ownerId?: string } } }>(`/api/projects/${projectId}`);
+					const isOwner = project.project.workspace?.ownerId === user.id;
+					const isAdmin = data.members.find(m => m.userId === user.id && m.role === "ADMIN");
+					setCanManage(isOwner || !!isAdmin);
+				} catch {}
+			}
 		} catch (err: any) {
 			setError(err.message || "Failed to load members");
 		} finally {
@@ -89,6 +107,33 @@ export default function ProjectMembersPage() {
 			setError(err.message || "Failed to invite member");
 		} finally {
 			setInviting(false);
+		}
+	}
+
+	async function updateRole(userId: string, newRole: "ADMIN" | "MEMBER" | "VIEWER") {
+		try {
+			await apiFetch(`/api/projects/${projectId}/members/${userId}`, {
+				method: "PUT",
+				body: JSON.stringify({ role: newRole }),
+			});
+			await loadMembers();
+			setEditingRole(null);
+			setError(null);
+		} catch (err: any) {
+			setError(err.message || "Failed to update role");
+		}
+	}
+
+	async function removeMember(userId: string) {
+		if (!confirm("Remove this member from the project?")) return;
+		try {
+			await apiFetch(`/api/projects/${projectId}/members/${userId}`, {
+				method: "DELETE",
+			});
+			await loadMembers();
+			setError(null);
+		} catch (err: any) {
+			setError(err.message || "Failed to remove member");
 		}
 	}
 
@@ -152,6 +197,23 @@ export default function ProjectMembersPage() {
 				</form>
 			</div>
 
+			{/* Current User's Role Highlight */}
+			{currentUserId && (
+				<div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+					<h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-2">Your Role in This Project</h3>
+					{(() => {
+						const myMember = members.find(m => m.userId === currentUserId);
+						const role = myMember?.role || "NOT A MEMBER";
+						return (
+							<div className="flex items-center gap-3">
+								<span className={`text-base font-semibold px-4 py-2 rounded ${ROLE_COLORS[role]}`}>{role}</span>
+								<span className="text-sm text-blue-800 dark:text-blue-300">{ROLE_DESCRIPTIONS[role]}</span>
+							</div>
+						);
+					})()}
+				</div>
+			)}
+
 			<div className="space-y-3">
 				<h2 className="font-semibold text-lg mb-4">Team Members ({members.length})</h2>
 				{members.length === 0 ? (
@@ -164,7 +226,11 @@ export default function ProjectMembersPage() {
 						return (
 							<div
 								key={member.userId}
-								className="flex items-center justify-between bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4"
+								className={`flex items-center justify-between rounded-lg p-4 ${
+									member.userId === currentUserId
+										? "bg-blue-50 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700"
+										: "bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800"
+								}`}
 							>
 								<div className="flex items-center gap-3">
 									<div className={`p-2 rounded-lg ${ROLE_COLORS[member.role]}`}>
@@ -176,12 +242,50 @@ export default function ProjectMembersPage() {
 									</div>
 								</div>
 								<div className="flex items-center gap-2">
-									<span
-										className={`text-xs px-3 py-1 rounded ${ROLE_COLORS[member.role]}`}
-										title={ROLE_DESCRIPTIONS[member.role]}
-									>
-										{member.role}
-									</span>
+									{editingRole === member.userId ? (
+										<select
+											className="text-xs px-2 py-1 rounded border bg-white dark:bg-zinc-900"
+											value={member.role}
+											onChange={(e) => {
+												const newRole = e.target.value as "ADMIN" | "MEMBER" | "VIEWER";
+												updateRole(member.userId, newRole);
+											}}
+											onBlur={() => setEditingRole(null)}
+											autoFocus
+										>
+											<option value="MEMBER">MEMBER</option>
+											<option value="ADMIN">ADMIN</option>
+											<option value="VIEWER">VIEWER</option>
+										</select>
+									) : (
+										<span
+											className={`text-xs px-3 py-1 rounded ${ROLE_COLORS[member.role]}`}
+											title={ROLE_DESCRIPTIONS[member.role]}
+										>
+											{member.role}
+										</span>
+									)}
+									{member.userId === currentUserId && (
+										<span className="text-xs font-medium text-blue-600 dark:text-blue-400">(You)</span>
+									)}
+									{canManage && member.userId !== currentUserId && (
+										<>
+											{editingRole !== member.userId && (
+												<button
+													onClick={() => setEditingRole(member.userId)}
+													className="text-xs px-2 py-1 rounded border hover:bg-zinc-100 dark:hover:bg-zinc-700"
+												>
+													Change Role
+												</button>
+											)}
+											<button
+												onClick={() => removeMember(member.userId)}
+												className="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+											>
+												Remove
+											</button>
+										</>
+									)}
 								</div>
 							</div>
 						);

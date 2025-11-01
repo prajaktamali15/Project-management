@@ -188,7 +188,7 @@ export default function WorkspaceMembersPage() {
 	};
 
 	return (
-		<div>
+		<div className="max-w-7xl mx-auto p-8">
 			<div className="flex items-center justify-between mb-6">
 				<div>
 					<Link href={`/workspaces/${workspaceId}`} className="text-blue-600 mb-2 inline-block hover:underline">
@@ -242,12 +242,34 @@ export default function WorkspaceMembersPage() {
 				</div>
 			</form>
 
+			{/* Current User's Role Highlight */}
+			{currentUserId && (
+				<div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+					<h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-2">Your Role in This Workspace</h3>
+					{(() => {
+						const myMember = members.find(m => m.userId === currentUserId);
+						const isOwner = workspace?.ownerId === currentUserId;
+						const role = isOwner ? "OWNER" : (myMember?.role || "NOT A MEMBER");
+						return (
+							<div className="flex items-center gap-3">
+								<span className={`text-base font-semibold px-4 py-2 rounded ${ROLE_COLORS[role]}`}>{role}</span>
+								<span className="text-sm text-blue-800 dark:text-blue-300">{ROLE_DESCRIPTIONS[role]}</span>
+							</div>
+						);
+					})()}
+				</div>
+			)}
+
 			<div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
 				{members.map((m) => (
 					<button
 						key={m.userId}
 						onClick={() => { setSelectedMember(m); setShowMemberModal(true); }}
-						className="text-left border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 hover:shadow-md transition-shadow bg-white dark:bg-zinc-900"
+						className={`text-left border rounded-lg p-3 hover:shadow-md transition-shadow ${
+							m.userId === currentUserId
+								? "border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/20"
+								: "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+						}`}
 					>
 						<div className="flex items-center justify-between">
 							<div className="flex items-center gap-3">
@@ -260,6 +282,9 @@ export default function WorkspaceMembersPage() {
 							<span className={`text-xs px-2 py-0.5 rounded ${ROLE_COLORS[m.role]}`}>{m.role}</span>
 						</div>
 						<p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{ROLE_DESCRIPTIONS[m.role]}</p>
+						{m.userId === currentUserId && (
+							<p className="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">(You)</p>
+						)}
 					</button>
 				))}
 			</div>

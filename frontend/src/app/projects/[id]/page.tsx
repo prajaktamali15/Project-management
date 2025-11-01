@@ -11,6 +11,7 @@ import {
 	useSensor,
 	useSensors,
 	closestCorners,
+	useDroppable,
 } from "@dnd-kit/core";
 import {
 	arrayMove,
@@ -39,8 +40,11 @@ type Project = { id: string; name: string; workspaceId: string; status?: "PLANNE
 
 const statuses: Task["status"][] = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
 
-function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
-	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+function TaskCard({ task, onClick, canDrag }: { task: Task; onClick: () => void; canDrag: boolean }) {
+	const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ 
+		id: task.id,
+		disabled: !canDrag
+	});
 
 	const style = {
 		transform: CSS.Transform.toString(transform),
@@ -59,10 +63,9 @@ function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
 		<div
 			ref={setNodeRef}
 			style={style}
-			{...attributes}
-			{...listeners}
+			{...(canDrag ? { ...attributes, ...listeners } : {})}
 			onClick={onClick}
-			className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow"
+			className={`bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
 		>
 			<div className="flex items-start justify-between mb-2">
 				<h4 className="font-medium text-sm flex-1 line-clamp-2">
@@ -85,16 +88,20 @@ function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
 	);
 }
 
-function TaskColumn({ title, tasks, status, onTaskClick }: { title: string; tasks: Task[]; status: Task["status"]; onTaskClick: (task: Task) => void }) {
+function TaskColumn({ title, tasks, status, onTaskClick, canDrag }: { title: string; tasks: Task[]; status: Task["status"]; onTaskClick: (task: Task) => void; canDrag: boolean }) {
+	const { setNodeRef, isOver } = useDroppable({
+		id: status,
+	});
+
 	return (
-		<div className="flex-1 min-w-0">
+		<div ref={setNodeRef} className={`flex-1 min-w-0 ${isOver ? "bg-zinc-100 dark:bg-zinc-800/50 rounded-lg p-2" : ""}`}>
 			<h3 className="font-semibold mb-3 text-sm uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
 				{title} ({tasks.length})
 			</h3>
 			<SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-				<div className="space-y-2">
+				<div className="space-y-2 min-h-[100px]">
 					{tasks.map((task) => (
-						<TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
+						<TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} canDrag={canDrag} />
 					))}
 				</div>
 			</SortableContext>
@@ -294,6 +301,7 @@ export default function ProjectPage() {
 	const [editTaskPriority, setEditTaskPriority] = useState<Task["priority"]>("MEDIUM");
 	const [editTaskDueDate, setEditTaskDueDate] = useState<string>("");
 	const [editTaskAssigneeId, setEditTaskAssigneeId] = useState<string>("");
+	const [editTaskStatus, setEditTaskStatus] = useState<Task["status"]>("TODO");
 
 	const sensors = useSensors(
 		useSensor(PointerSensor, {
@@ -517,34 +525,60 @@ export default function ProjectPage() {
 	// Compute last assignee review time and latest reviewer decision
 	useEffect(() => {
 		if (!selectedTask) { setLastAssigneeReviewAt(null); setLastReviewerDecision(null); return; }
+		
+		// If task is not in REVIEW, clear decision state
+		if (selectedTask.status !== "REVIEW") {
+			setLastAssigneeReviewAt(null);
+			setLastReviewerDecision(null);
+			return;
+		}
+		
 		const assigneeId = selectedTask.assignee?.id;
 		let lastAssigneeTs: number | null = null;
 		let latestDecision: typeof lastReviewerDecision = null;
 
-		// Helper to check if author is owner/admin: we only have current user's permissions, so we approximate by "not the assignee" for decision visibility, relying on backend enforcement for approval comments.
+		// IMPORTANT: Only consider decisions that come AFTER an assignee review comment
+		// AND only consider RECENT decisions (within last 5 minutes) to ignore old approvals
+		// First, find the latest assignee review comment
+		let latestAssigneeReviewTime: number | null = null;
+		const now = Date.now();
+		const fiveMinutesAgo = now - (5 * 60 * 1000); // 5 minutes - very recent only
+		
 		for (const c of taskCommentsForModal) {
 			const ts = c.createdAt ? new Date(c.createdAt).getTime() : 0;
 			if (assigneeId && c.author.id === assigneeId) {
 				lastAssigneeTs = Math.max(lastAssigneeTs ?? 0, ts);
-			} else {
-				const content = c.content || "";
-				if (/^approved\b/i.test(content) || /\bapproved\b/i.test(content)) {
-					if (!latestDecision || ts > latestDecision.timestamp) {
-						latestDecision = {
-							type: "approved",
-							message: content,
-							reviewerName: c.author.name || c.author.email,
-							timestamp: ts,
-						};
-					}
-				} else if (/^changes needed:/i.test(content) || /\bchanges requested\b/i.test(content)) {
-					if (!latestDecision || ts > latestDecision.timestamp) {
-						latestDecision = {
-							type: "changes",
-							message: content,
-							reviewerName: c.author.name || c.author.email,
-							timestamp: ts,
-						};
+				latestAssigneeReviewTime = Math.max(latestAssigneeReviewTime ?? 0, ts);
+			}
+		}
+
+		// Now find decisions - consider ALL recent decisions (within last 5 minutes)
+		// This ensures freshly clicked Approve/Request Changes is detected immediately
+		for (const c of taskCommentsForModal) {
+			const ts = c.createdAt ? new Date(c.createdAt).getTime() : 0;
+			const content = c.content || "";
+			
+			// Consider decision comments from non-assignee (admin/owner)
+			if (!assigneeId || c.author.id !== assigneeId) {
+				if ((/^approved\b/i.test(content) || /\bapproved\b/i.test(content)) || 
+					(/^changes needed:/i.test(content) || /\bchanges requested\b/i.test(content))) {
+					
+					// Include decision if it's RECENT (within last 5 minutes)
+					// OR if there's assignee review and decision is after it
+					const isRecent = ts > fiveMinutesAgo;
+					const isAfterAssigneeReview = latestAssigneeReviewTime !== null && ts > latestAssigneeReviewTime;
+					
+					// Accept decision if recent OR after assignee review
+					if (isRecent || isAfterAssigneeReview) {
+						if (!latestDecision || ts > latestDecision.timestamp) {
+							const isApproved = /^approved\b/i.test(content) || /\bapproved\b/i.test(content);
+							latestDecision = {
+								type: isApproved ? "approved" : "changes",
+								message: content,
+								reviewerName: c.author.name || c.author.email,
+								timestamp: ts,
+							};
+						}
 					}
 				}
 			}
@@ -593,25 +627,41 @@ export default function ProjectPage() {
 	async function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event;
 
-		if (!over || active.id === over.id) return;
+		if (!over) {
+			setActiveTask(null);
+			return;
+		}
+
+		if (active.id === over.id) {
+			setActiveTask(null);
+			return;
+		}
 
 		const task = tasks.find((t) => t.id === active.id);
-		if (!task) return;
+		if (!task) {
+			setActiveTask(null);
+			return;
+		}
 
+		// Check if dropping on a status column or on another task
 		const newStatus = over.id as Task["status"];
-		if (!statuses.includes(newStatus) || task.status === newStatus) return;
+		if (!statuses.includes(newStatus)) {
+			// Might be dropping on another task, ignore for now
+			setActiveTask(null);
+			return;
+		}
 
-		// Prevent assignee from bypassing review gate via drag-and-drop
-		const isAssignee = task.assignee?.id === currentUserId;
-		if (isAssignee && !canEditProject) {
-			if (newStatus === "DONE" && task.status !== "REVIEW") {
-				setError("You can complete only after approval (in Review).");
+		if (task.status === newStatus) {
+			setActiveTask(null);
 				return;
 			}
-			if (newStatus === "REVIEW" && task.status !== "IN_PROGRESS") {
-				setError("You can request review only from In Progress.");
+
+		// Only owners/admins can change task status via drag-and-drop
+		// Regular assignees cannot change status this way (they must use workflow buttons)
+		if (!canEditProject) {
+			setError("Only workspace owners and admins can change task status.");
+			setActiveTask(null);
 				return;
-			}
 		}
 
 		try {
@@ -638,10 +688,23 @@ export default function ProjectPage() {
 
 			// Reload tasks to ensure consistency
 			await loadTasks();
+			setError(null); // Clear any previous errors on success
+			
+			// If task was moved to REVIEW, refresh comments to ensure fresh review state
+			if (newStatus === "REVIEW" && selectedTask?.id === task.id) {
+				try {
+					const data = await apiFetch<{ comments: Array<{ id: string; content: string; createdAt?: string; author: { id: string; name?: string | null; email: string } }> }>(`/api/tasks/${task.id}/comments`);
+					setTaskCommentsForModal(data.comments || []);
+				} catch {}
+			}
 		} catch (e: any) {
-			// Rollback on error
-			setTasks(tasks);
-			setError("Failed to update task status: " + (e.message || "Unknown error"));
+			// Rollback on error - reload original tasks
+			await loadTasks();
+			const errorMsg = e.message || e.error || "Unknown error";
+			setError("Failed to update task status: " + errorMsg);
+			console.error("Drag drop error:", e);
+		} finally {
+			setActiveTask(null);
 		}
 	}
 
@@ -667,7 +730,7 @@ export default function ProjectPage() {
 
 			// Then mark task as DONE
 			await apiFetch(`/api/tasks/${selectedTask.id}`, { method: "PUT", body: JSON.stringify({ status: "DONE" }) });
-            setCompleteFiles(null);
+			setCompleteFiles(null);
             closeTaskModalAndClearQuery();
 			await loadTasks();
 		} catch (e: any) {
@@ -697,6 +760,7 @@ export default function ProjectPage() {
 			if (editTaskDueDate !== (selectedTask.dueDate ? new Date(selectedTask.dueDate).toISOString().slice(0, 10) : "")) {
 				payload.dueDate = editTaskDueDate ? new Date(editTaskDueDate).toISOString() : null;
 			}
+			if (editTaskStatus !== selectedTask.status) payload.status = editTaskStatus;
 
 			await apiFetch(`/api/tasks/${selectedTask.id}`, { method: "PUT", body: JSON.stringify(payload) });
 			// Sync dependencies (add/remove)
@@ -728,8 +792,8 @@ export default function ProjectPage() {
 	}
 
 	async function deleteTask(taskId: string) {
-        try {
-            await apiFetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+		try {
+			await apiFetch(`/api/tasks/${taskId}`, { method: "DELETE" });
             closeTaskModalAndClearQuery();
 			await loadTasks();
 		} catch (e: any) {
@@ -901,19 +965,22 @@ export default function ProjectPage() {
 
 			<DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
 				<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-					<TaskColumn title="To Do" tasks={tasksByStatus.TODO} status="TODO" onTaskClick={(task) => (setSelectedTask(task), setShowTaskModal(true))} />
-					<TaskColumn title="In Progress" tasks={tasksByStatus.IN_PROGRESS} status="IN_PROGRESS" onTaskClick={(task) => (setSelectedTask(task), setShowTaskModal(true))} />
-					<TaskColumn title="Review" tasks={tasksByStatus.REVIEW} status="REVIEW" onTaskClick={(task) => (setSelectedTask(task), setShowTaskModal(true))} />
-					<TaskColumn title="Done" tasks={tasksByStatus.DONE} status="DONE" onTaskClick={(task) => (setSelectedTask(task), setShowTaskModal(true))} />
+					<TaskColumn title="To Do" tasks={tasksByStatus.TODO} status="TODO" onTaskClick={(task) => (setSelectedTask(task), setShowTaskModal(true))} canDrag={canEditProject} />
+					<TaskColumn title="In Progress" tasks={tasksByStatus.IN_PROGRESS} status="IN_PROGRESS" onTaskClick={(task) => (setSelectedTask(task), setShowTaskModal(true))} canDrag={canEditProject} />
+					<TaskColumn title="Review" tasks={tasksByStatus.REVIEW} status="REVIEW" onTaskClick={(task) => (setSelectedTask(task), setShowTaskModal(true))} canDrag={canEditProject} />
+					<TaskColumn title="Done" tasks={tasksByStatus.DONE} status="DONE" onTaskClick={(task) => (setSelectedTask(task), setShowTaskModal(true))} canDrag={canEditProject} />
 				</div>
 
-				<DragOverlay>{activeTask && <TaskCard task={activeTask} onClick={() => {}} />}</DragOverlay>
+				<DragOverlay>{activeTask && <TaskCard task={activeTask} onClick={() => {}} canDrag={true} />}</DragOverlay>
 			</DndContext>
 
 			{showTaskModal && selectedTask && (() => {
 				const isAssignedToMe = selectedTask.assignee?.id === currentUserId;
 				const canComplete = isAssignedToMe || canEditProject;
 				const canDelete = canEditProject;
+				// Admin/owner can always review tasks (even if they're the assignee)
+				// This ensures buttons show for admin assignees too
+				const canReview = canEditProject;
 				
 				return (
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={closeTaskModalAndClearQuery}>
@@ -943,6 +1010,7 @@ export default function ProjectPage() {
 														setEditTaskPriority(selectedTask.priority);
 														setEditTaskAssigneeId(selectedTask.assignee?.id || "");
 														setEditTaskDueDate(selectedTask.dueDate ? new Date(selectedTask.dueDate).toISOString().slice(0, 10) : "");
+														setEditTaskStatus(selectedTask.status);
 													}
 													return next;
 												});
@@ -961,7 +1029,32 @@ export default function ProjectPage() {
 							<div className="grid md:grid-cols-2 gap-4 mb-6 p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
 								<div>
 									<p className="text-xs text-zinc-500 mb-1">Status</p>
+									{canEditProject ? (
+										<select 
+											className="w-full border rounded px-3 py-2 bg-white dark:bg-zinc-900 text-sm font-medium"
+											value={selectedTask.status}
+											onChange={async (e) => {
+												const newStatus = e.target.value as Task["status"];
+												try {
+													await apiFetch(`/api/tasks/${selectedTask.id}`, {
+														method: "PUT",
+														body: JSON.stringify({ status: newStatus }),
+													});
+													await loadTasks();
+													setSelectedTask({ ...selectedTask, status: newStatus });
+												} catch (err: any) {
+													setError(err.message || "Failed to update status");
+												}
+											}}
+										>
+											<option value="TODO">TODO</option>
+											<option value="IN_PROGRESS">IN_PROGRESS</option>
+											<option value="REVIEW">REVIEW</option>
+											<option value="DONE">DONE</option>
+										</select>
+									) : (
 									<p className="font-medium">{selectedTask.status}</p>
+									)}
 								</div>
 								<div>
 									<p className="text-xs text-zinc-500 mb-1">Priority</p>
@@ -1115,35 +1208,78 @@ export default function ProjectPage() {
 								</div>
 							)}
 
-					{/* Owner/Admin: Review section when in REVIEW - show decision banner after action until new review request */}
-					{canEditProject && selectedTask.status === "REVIEW" && (
+					{/* Owner/Admin: Review section when in REVIEW */}
+					{/* IMPORTANT: Once ANY admin/owner approves/requests changes, banner shows for ALL (avoid conflicts) */}
+					{canReview && selectedTask.status === "REVIEW" && (
 						(() => {
-							const showDecisionBanner = !!(lastReviewerDecision && (lastAssigneeReviewAt == null || lastReviewerDecision.timestamp > lastAssigneeReviewAt));
-							if (showDecisionBanner && lastReviewerDecision) {
+							// CRITICAL LOGIC:
+							// 1. Buttons show by default when task is in REVIEW
+							// 2. Banner shows ONLY if a VERY RECENT decision was made (within last 3 minutes)
+							// 3. This completely ignores old approvals from previous review cycles
+							// 4. Once recent decision is made, BOTH admin and owner see banner (buttons hidden)
+							
+							const now = Date.now();
+							const threeMinutesAgo = now - (3 * 60 * 1000); // 3 minutes - very recent only
+							
+							// Banner shows ONLY if:
+							// 1. A decision exists
+							// 2. Decision was made within last 3 minutes (VERY RECENT - ignores old approvals)
+							// This ensures old approvals from hours/days ago are completely ignored
+							const isVeryRecentDecision = lastReviewerDecision !== null && 
+														lastReviewerDecision.timestamp > threeMinutesAgo;
+							
+							const shouldShowBanner = isVeryRecentDecision;
+							
+							// CRITICAL: If ANY admin/owner has made a decision after assignee review, 
+							// show banner for ALL admins/owners (buttons hidden for everyone to avoid conflicts)
+							if (shouldShowBanner && lastReviewerDecision) {
+								// Decision was made by ANY admin/owner - show banner to ALL
+								// This ensures both admin and owner see the same state (banner, no buttons)
+								// Prevents conflicts where multiple people try to approve simultaneously
 								return (
 									<div className={`mb-6 p-4 border rounded-lg ${lastReviewerDecision.type === "approved" ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800" : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"}`}>
 										<div className="flex items-start gap-2">
 											<span className="text-xl" aria-hidden> {lastReviewerDecision.type === "approved" ? "✔️" : "🛑"} </span>
 											<div>
-												<p className="font-semibold mb-1">{lastReviewerDecision.type === "approved" ? "You approved this review request" : `You requested changes`}</p>
+												<p className="font-semibold mb-1">
+													{lastReviewerDecision.type === "approved" 
+														? "✓ Approved by " + lastReviewerDecision.reviewerName + " (Decision made)"
+														: "Changes requested by " + lastReviewerDecision.reviewerName + " (Decision made)"}
+												</p>
 												<p className="text-sm text-zinc-700 dark:text-zinc-300">{lastReviewerDecision.message}</p>
-												<p className="text-xs text-zinc-500 mt-1">Last reviewed by you on {new Date(lastReviewerDecision.timestamp).toLocaleString()}</p>
+												<p className="text-xs text-zinc-500 mt-1">Reviewed on {new Date(lastReviewerDecision.timestamp).toLocaleString()}</p>
+												<p className="text-xs text-zinc-500 mt-1 italic">Buttons are hidden for all admins/owners to prevent conflicts.</p>
+												{lastReviewerDecision.type === "approved" && (
+													<p className="text-sm font-medium mt-2 text-emerald-700 dark:text-emerald-300">The assignee can now mark this task as complete.</p>
+												)}
+												{lastReviewerDecision.type === "changes" && (
+													<p className="text-sm font-medium mt-2 text-red-700 dark:text-red-300">The assignee should address the feedback and resubmit for review.</p>
+												)}
 											</div>
 										</div>
 									</div>
 								);
 							}
 
+							// NO decision made yet - SHOW BUTTONS to all admins/owners
+							// Both admin and owner can see and use these buttons
+							// Once ANYONE clicks approve/request changes, buttons disappear for EVERYONE
 							return (
 								<div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-									<h3 className="font-semibold text-amber-900 dark:text-amber-300 mb-3">Review Actions</h3>
+									<h3 className="font-semibold text-amber-900 dark:text-amber-300 mb-3">
+										Review Actions {isAssignedToMe && canEditProject ? "(You are both assignee and admin)" : ""}
+									</h3>
 									<div className="mb-3 space-y-2">
-										<p className="text-sm text-zinc-700 dark:text-zinc-300"><span className="font-medium">Review message:</span> {latestReviewMsg || "—"}</p>
+										<p className="text-sm text-zinc-700 dark:text-zinc-300">
+											<span className="font-medium">Review message:</span> {latestReviewMsg || "—"}
+										</p>
 										<div>
 											<p className="text-sm font-medium mb-1">Review files (from assignee)</p>
 											<ul className="space-y-1 text-sm">
 												{taskAttachments.filter(a => a.uploaderId === (selectedTask.assignee?.id || "")).map(a => (
-													<li key={a.id}><a className="text-blue-700 hover:underline" href={`${backendBase}${a.url}`} target="_blank" rel="noreferrer">{a.fileName}</a></li>
+													<li key={a.id}>
+														<a className="text-blue-700 hover:underline" href={`${backendBase}${a.url}`} target="_blank" rel="noreferrer">{a.fileName}</a>
+													</li>
 												))}
 												{!taskAttachments.some(a => a.uploaderId === (selectedTask.assignee?.id || "")) && (<li className="text-zinc-500">No files</li>)}
 											</ul>
@@ -1151,32 +1287,67 @@ export default function ProjectPage() {
 									</div>
 									<div className="flex flex-col md:flex-row gap-2">
 										<button onClick={async () => {
-											await postOwnerComment("Approved. You can mark as complete.");
-											await loadTasks();
-											// reload comments to show banner immediately
-											if (selectedTask) {
-												try {
-													const data = await apiFetch<{ comments: Array<{ id: string; content: string; createdAt?: string; author: { id: string; name?: string | null; email: string } }> }>(`/api/tasks/${selectedTask.id}/comments`);
-													setTaskCommentsForModal(data.comments || []);
-													// Clear previous review message in the actions section
-													setLatestReviewMsg("");
-												} catch {}
+											if (!selectedTask) return;
+											try {
+												// Post approval comment
+												await postOwnerComment("Approved. You can mark as complete.");
+												
+												// Wait a moment for backend to process
+												await new Promise(resolve => setTimeout(resolve, 100));
+												
+												// CRITICAL: Immediately reload comments to detect new approval
+												const data = await apiFetch<{ comments: Array<{ id: string; content: string; createdAt?: string; author: { id: string; name?: string | null; email: string } }> }>(`/api/tasks/${selectedTask.id}/comments`);
+												setTaskCommentsForModal(data.comments || []);
+												setLatestReviewMsg("");
+												
+												// Force re-render by updating selected task
+												// The useEffect for computing decisions will run and detect the new approval
+												const updated = (await apiFetch<{ items: Task[] }>(`/api/tasks?projectId=${projectId}`)).items.find(t => t.id === selectedTask.id);
+												if (updated) {
+													setSelectedTask(updated);
+												}
+												
+												// Reload tasks list
+												await loadTasks();
+											} catch (err) {
+												console.error("Error approving:", err);
 											}
-										}} className="px-4 py-2 rounded bg-emerald-600 text-white">Approve</button>
+										}} className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
+											Approve
+										</button>
 										<button onClick={async () => {
-											const t = prompt("Describe required changes for the assignee:");
-											if (t) {
-												await postOwnerComment("Changes needed: " + t);
+											if (!selectedTask) return;
+											try {
+												const t = prompt("Describe required changes for the assignee:");
+												if (t) {
+													// Post changes request comment
+													await postOwnerComment("Changes needed: " + t);
+												}
+												
+												// Change status to IN_PROGRESS
+												await apiFetch(`/api/tasks/${selectedTask.id}`, { method: "PUT", body: JSON.stringify({ status: "IN_PROGRESS" }) }).catch(()=>{});
+												
+												// Wait a moment for backend to process
+												await new Promise(resolve => setTimeout(resolve, 100));
+												
+												// CRITICAL: Immediately reload comments to detect new decision
+												const data = await apiFetch<{ comments: Array<{ id: string; content: string; createdAt?: string; author: { id: string; name?: string | null; email: string } }> }>(`/api/tasks/${selectedTask.id}/comments`);
+												setTaskCommentsForModal(data.comments || []);
+												
+												// Force re-render by updating selected task
+												const updated = (await apiFetch<{ items: Task[] }>(`/api/tasks?projectId=${projectId}`)).items.find(t => t.id === selectedTask.id);
+												if (updated) {
+													setSelectedTask(updated);
+												}
+												
+												// Reload tasks list
+												await loadTasks();
+											} catch (err) {
+												console.error("Error requesting changes:", err);
 											}
-											await apiFetch(`/api/tasks/${selectedTask?.id}`, { method: "PUT", body: JSON.stringify({ status: "IN_PROGRESS" }) }).catch(()=>{});
-											await loadTasks();
-											if (selectedTask) {
-												try {
-													const data = await apiFetch<{ comments: Array<{ id: string; content: string; createdAt?: string; author: { id: string; name?: string | null; email: string } }> }>(`/api/tasks/${selectedTask.id}/comments`);
-													setTaskCommentsForModal(data.comments || []);
-												} catch {}
-											}
-										}} className="px-4 py-2 rounded bg-red-600 text-white">Request Changes</button>
+										}} className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 transition-colors">
+											Request Changes
+										</button>
 									</div>
 								</div>
 							);
@@ -1220,6 +1391,15 @@ export default function ProjectPage() {
 												<div>
 													<label className="block text-sm mb-1">Due date</label>
 													<input type="date" className="w-full border rounded px-3 py-2" value={editTaskDueDate} onChange={(e) => setEditTaskDueDate(e.target.value)} />
+												</div>
+												<div>
+													<label className="block text-sm mb-1">Status</label>
+													<select className="w-full border rounded px-3 py-2 bg-white dark:bg-zinc-900" value={editTaskStatus} onChange={(e) => setEditTaskStatus(e.target.value as Task["status"])}>
+														<option value="TODO">TODO</option>
+														<option value="IN_PROGRESS">IN_PROGRESS</option>
+														<option value="REVIEW">REVIEW</option>
+														<option value="DONE">DONE</option>
+													</select>
 												</div>
 											</div>
 										{/* Dependencies selector */}

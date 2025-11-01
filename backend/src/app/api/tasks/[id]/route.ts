@@ -61,8 +61,10 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     }
     
     // Restrict assignee status transitions for clarity of workflow
+    // NOTE: Owners bypass all restrictions and can change task status freely (except dependencies)
     if (!isOwner) {
       const isAdmin = await requireWorkspaceRole(user.id, existing.project.workspaceId, ["OWNER", "ADMIN"]);
+      // Admins also bypass restrictions - only regular assignees face status transition rules
       if (!isAdmin && data.status) {
         // Assignee-only transitions: IN_PROGRESS -> REVIEW, REVIEW -> DONE
         if (data.status === "REVIEW" && existing.status !== "IN_PROGRESS") {

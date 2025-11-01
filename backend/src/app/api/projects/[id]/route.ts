@@ -19,7 +19,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
   try {
     const project = await prisma.project.findUnique({
       where: { id },
-      include: { workspace: true }
+      include: { workspace: { select: { id: true, name: true, ownerId: true, description: true, settings: true, createdAt: true, updatedAt: true } } }
     });
     
     if (!project) return new Response(JSON.stringify({ error: "Not Found" }), { status: 404 });

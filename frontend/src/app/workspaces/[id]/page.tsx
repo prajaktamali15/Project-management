@@ -134,9 +134,20 @@ export default function WorkspacePage() {
 	return (
 		<div className="max-w-7xl mx-auto p-8">
 			<div className="flex items-center justify-between mb-6">
-				<h1 className="text-2xl font-bold">{workspace?.name ?? (limitedView ? "Projects" : "Workspace")}</h1>
+				<div>
+					<h1 className="text-2xl font-bold">{workspace?.name ?? (limitedView ? "Projects" : "Workspace")}</h1>
+					<div className="mt-2 flex items-center gap-2">
+						<span className="text-sm text-zinc-500 dark:text-zinc-400">Your Role:</span>
+						<span className={`text-sm font-semibold px-3 py-1 rounded ${ROLE_COLORS[userRole]}`}>{userRole}</span>
+						<span className="text-xs text-zinc-400 dark:text-zinc-500">
+							{userRole === "OWNER" && "(Full control)"}
+							{userRole === "ADMIN" && "(Can manage members and projects)"}
+							{userRole === "MEMBER" && "(Can work on tasks)"}
+							{userRole === "VIEWER" && "(Read-only access)"}
+						</span>
+					</div>
+				</div>
 				<div className="flex items-center gap-3">
-					<span className={`text-xs px-3 py-1 rounded ${ROLE_COLORS[userRole]}`}>{userRole}</span>
 					{!limitedView && (userRole === "OWNER" || userRole === "ADMIN") && (
 						<button onClick={() => { setShowSettings(!showSettings); setIsEditingWs(showSettings ? false : true); }} className="text-sm px-3 py-1 rounded bg-zinc-900 text-white">
 							Settings

@@ -69,7 +69,28 @@ export async function DELETE(_: NextRequest, context: { params: Promise<{ id: st
     const isOwner = workspace.ownerId === user.id;
     if (!isOwner) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
 
-    await prisma.workspace.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      // Delete task-related data across all projects in this workspace
+      await tx.taskAttachment.deleteMany({ where: { task: { project: { workspaceId: id } } } }).catch(() => {});
+      await tx.taskComment.deleteMany({ where: { task: { project: { workspaceId: id } } } }).catch(() => {});
+      await tx.taskLabel.deleteMany({ where: { task: { project: { workspaceId: id } } } }).catch(() => {});
+      await tx.taskDependency.deleteMany({ where: { OR: [ { task: { project: { workspaceId: id } } }, { dependsOn: { project: { workspaceId: id } } } ] } }).catch(() => {});
+      await tx.task.deleteMany({ where: { project: { workspaceId: id } } });
+
+      // Project memberships and activities
+      await tx.projectMember.deleteMany({ where: { project: { workspaceId: id } } });
+      await tx.activity.deleteMany({ where: { workspaceId: id } });
+
+      // Project-level records
+      await tx.project.deleteMany({ where: { workspaceId: id } });
+
+      // Workspace memberships and labels
+      await tx.workspaceMember.deleteMany({ where: { workspaceId: id } });
+      await tx.label.deleteMany({ where: { workspaceId: id } }).catch(() => {});
+
+      // Finally, workspace
+      await tx.workspace.delete({ where: { id } });
+    });
     return new Response(null, { status: 204 });
   } catch (err) {
     return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });

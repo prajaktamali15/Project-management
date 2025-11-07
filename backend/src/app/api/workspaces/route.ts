@@ -11,13 +11,28 @@ export async function POST(req: NextRequest) {
 
   try {
     const { name, settings } = CreateWorkspaceSchema.parse(await req.json());
-    const ws = await prisma.workspace.create({
-      data: {
-        name,
-        settings,
-        ownerId: user.id,
-        members: { create: { userId: user.id, role: "OWNER" } },
-      },
+    const ws = await prisma.$transaction(async (tx) => {
+      const workspace = await tx.workspace.create({
+        data: {
+          name,
+          settings,
+          ownerId: user.id,
+          members: { create: { userId: user.id, role: "OWNER" } },
+        },
+      });
+
+      await tx.activity.create({
+        data: {
+          action: "created_workspace",
+          targetType: "workspace",
+          targetId: workspace.id,
+          workspaceId: workspace.id,
+          userId: user.id,
+          metadata: { workspaceName: name },
+        },
+      });
+
+      return workspace;
     });
     return new Response(JSON.stringify({ workspace: ws }), { status: 201 });
   } catch (err) {

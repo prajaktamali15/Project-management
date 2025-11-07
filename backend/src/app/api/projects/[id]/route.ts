@@ -105,7 +105,21 @@ export async function DELETE(_: NextRequest, context: { params: Promise<{ id: st
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
   }
 
-  await prisma.project.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    // Clean up task-related data under this project
+    await tx.taskAttachment.deleteMany({ where: { task: { projectId: id } } }).catch(() => {});
+    await tx.taskComment.deleteMany({ where: { task: { projectId: id } } }).catch(() => {});
+    await tx.taskLabel.deleteMany({ where: { task: { projectId: id } } }).catch(() => {});
+    await tx.taskDependency.deleteMany({ where: { OR: [ { task: { projectId: id } }, { dependsOn: { projectId: id } } ] } }).catch(() => {});
+    await tx.task.deleteMany({ where: { projectId: id } });
+
+    // Memberships and activities
+    await tx.projectMember.deleteMany({ where: { projectId: id } });
+    await tx.activity.deleteMany({ where: { projectId: id } });
+
+    // Finally, the project
+    await tx.project.delete({ where: { id } });
+  });
   return new Response(null, { status: 204 });
 }
 

@@ -37,36 +37,36 @@ export async function POST(req: NextRequest) {
 			if (!isMember) return new Response(JSON.stringify({ error: "Assignee must be a workspace member" }), { status: 400 });
 		}
 
-    // Create task
-    const task = await prisma.task.create({
-      data: {
-        title: data.title,
-        description: data.description || undefined,
-        status: data.status || "TODO",
-        priority: data.priority || "MEDIUM",
-        dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
-        projectId: data.projectId,
-        assigneeId: data.assigneeId || undefined,
-      },
-    });
+		const task = await prisma.$transaction(async (tx) => {
+			const created = await tx.task.create({
+				data: {
+					title: data.title,
+					description: data.description || undefined,
+					status: data.status || "TODO",
+					priority: data.priority || "MEDIUM",
+					dueDate: data.dueDate ? new Date(data.dueDate) : undefined,
+					projectId: data.projectId,
+					assigneeId: data.assigneeId || undefined,
+				},
+			});
 
-		// Log activity (non-blocking)
-		try {
-			await prisma.activity.create({
+			// touch project updatedAt
+			await tx.project.update({ where: { id: data.projectId }, data: { updatedAt: new Date() } });
+
+			await tx.activity.create({
 				data: {
 					action: "created_task",
 					targetType: "task",
-					targetId: task.id,
+					targetId: created.id,
 					workspaceId: project.workspaceId,
 					projectId: data.projectId,
 					userId: user.id,
-					metadata: { taskTitle: task.title, status: task.status }
-				}
+					metadata: { taskTitle: created.title, status: created.status },
+				},
 			});
-		} catch (activityErr) {
-			// Log but don't fail task creation
-			console.error("Failed to log activity:", activityErr);
-		}
+
+			return created;
+		});
 
 		return new Response(JSON.stringify({ task }), { status: 201 });
 	} catch (err) {

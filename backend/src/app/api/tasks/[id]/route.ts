@@ -111,35 +111,38 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       }
     }
 
-    const updated = await prisma.task.update({
-      where: { id },
-      data: {
-        ...data,
-        dueDate: data.dueDate === undefined ? undefined : data.dueDate ? new Date(data.dueDate) : null,
-      },
-    });
-    
-    // Log activity if status changed
-    if (data.status && data.status !== oldStatus) {
-      const assigneeName = existing.assignee?.name || existing.assignee?.email?.split("@")[0] || "Unassigned";
-      await prisma.activity.create({
+    const updated = await prisma.$transaction(async (tx) => {
+      const up = await tx.task.update({
+        where: { id },
         data: {
-          action: "status_changed",
-          targetType: "task",
-          targetId: id,
-          workspaceId: existing.project.workspaceId,
-          projectId: existing.project.id,
-          userId: user.id,
-          metadata: {
-            taskTitle: updated.title,
-            oldStatus,
-            newStatus: data.status,
-            assigneeName,
-            changedBy: user.name || user.email
-          }
-        }
+          ...data,
+          dueDate: data.dueDate === undefined ? undefined : data.dueDate ? new Date(data.dueDate) : null,
+        },
       });
-    }
+
+      if (data.status && data.status !== oldStatus) {
+        const assigneeName = existing.assignee?.name || existing.assignee?.email?.split("@")[0] || "Unassigned";
+        await tx.activity.create({
+          data: {
+            action: "status_changed",
+            targetType: "task",
+            targetId: id,
+            workspaceId: existing.project.workspaceId,
+            projectId: existing.project.id,
+            userId: user.id,
+            metadata: {
+              taskTitle: up.title,
+              oldStatus,
+              newStatus: data.status,
+              assigneeName,
+              changedBy: user.name || user.email,
+            },
+          },
+        });
+      }
+
+      return up;
+    });
     
     return new Response(JSON.stringify({ task: updated }), { status: 200 });
   } catch (err) {

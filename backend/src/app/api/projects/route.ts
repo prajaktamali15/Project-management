@@ -36,35 +36,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const project = await prisma.project.create({
-      data: {
-        name,
-        description,
-        status,
-        workspaceId,
-      },
-    });
+    const project = await prisma.$transaction(async (tx) => {
+      const created = await tx.project.create({
+        data: {
+          name,
+          description,
+          status,
+          workspaceId,
+        },
+      });
 
-    // Automatically add the creator as project owner
-    await prisma.projectMember.create({
-      data: {
-        userId: user.id,
-        projectId: project.id,
-        role: "OWNER"
-      }
-    });
+      await tx.projectMember.create({
+        data: {
+          userId: user.id,
+          projectId: created.id,
+          role: "OWNER",
+        },
+      });
 
-    // Log activity
-    await prisma.activity.create({
-      data: {
-        action: "created_project",
-        targetType: "project",
-        targetId: project.id,
-        workspaceId,
-        projectId: project.id,
-        userId: user.id,
-        metadata: { projectName: name }
-      }
+      await tx.activity.create({
+        data: {
+          action: "created_project",
+          targetType: "project",
+          targetId: created.id,
+          workspaceId,
+          projectId: created.id,
+          userId: user.id,
+          metadata: { projectName: name },
+        },
+      });
+
+      return created;
     });
 
     return NextResponse.json({ project }, { status: 201 });

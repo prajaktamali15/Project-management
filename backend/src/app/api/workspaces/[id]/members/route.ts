@@ -28,7 +28,19 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   try {
     const { userId, role } = InviteSchema.parse(await req.json());
-    await prisma.workspaceMember.create({ data: { userId, workspaceId: id, role } });
+    await prisma.$transaction(async (tx) => {
+      await tx.workspaceMember.create({ data: { userId, workspaceId: id, role } });
+      await tx.activity.create({
+        data: {
+          action: "added_member",
+          targetType: "workspace",
+          targetId: id,
+          workspaceId: id,
+          userId: user.id,
+          metadata: { invitedUserId: userId, role },
+        },
+      });
+    });
     return new Response(JSON.stringify({ ok: true }), { status: 201 });
   } catch (err) {
     if (err instanceof z.ZodError) return new Response(JSON.stringify({ error: err.flatten() }), { status: 400 });

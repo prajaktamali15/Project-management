@@ -77,7 +77,7 @@ export async function PUT(req: NextRequest) {
     return new Response(JSON.stringify({ user: updated }), { status: 200 });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      const errorDetails = err.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", ");
+      const errorDetails = err.issues.map(e => `${e.path.join(".")}: ${e.message}`).join(", ");
       return new Response(JSON.stringify({ error: `Validation failed: ${errorDetails}` }), { status: 400 });
     }
     console.error("Profile update error:", err);

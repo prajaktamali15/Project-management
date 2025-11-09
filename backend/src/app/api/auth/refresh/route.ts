@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { signAccessToken, verifyRefreshToken } from "@/lib/jwt";
+import { ApiResponse } from "@/lib/api-response";
 
 const RefreshSchema = z.object({
   refreshToken: z.string().min(10),
@@ -14,12 +15,12 @@ export async function POST(req: NextRequest) {
     const payload = verifyRefreshToken(refreshToken);
     const accessToken = signAccessToken({ userId: (payload as any).userId, email: (payload as any).email });
 
-    return new Response(JSON.stringify({ accessToken }), { status: 200 });
+    return ApiResponse.success({ accessToken });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return new Response(JSON.stringify({ error: err.flatten() }), { status: 400 });
+      return ApiResponse.validationError(err.flatten());
     }
-    return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401 });
+    return ApiResponse.unauthorized("Invalid token");
   }
 }
 

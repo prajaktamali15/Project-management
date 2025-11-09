@@ -11,11 +11,12 @@ type Member = {
 	user: { id: string; name: string | null; email: string };
 };
 
-const ROLE_COLORS = {
+const ROLE_COLORS: Record<string, string> = {
 	OWNER: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
 	ADMIN: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
 	MEMBER: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
 	VIEWER: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
+	"NOT A MEMBER": "bg-gray-100 text-gray-600 dark:bg-gray-900/30 dark:text-gray-500",
 };
 
 const ROLE_ICONS = {
@@ -25,11 +26,12 @@ const ROLE_ICONS = {
 	VIEWER: Eye,
 };
 
-const ROLE_DESCRIPTIONS = {
+const ROLE_DESCRIPTIONS: Record<string, string> = {
 	OWNER: "Full control over the project. Can manage all aspects including deletion.",
 	ADMIN: "Can manage projects, members, and all tasks within this project.",
 	MEMBER: "Can work on assigned tasks and change their status. Limited edit rights.",
 	VIEWER: "Can only view the project and tasks. No edit permissions.",
+	"NOT A MEMBER": "You are not a member of this project.",
 };
 
 export default function ProjectMembersPage() {

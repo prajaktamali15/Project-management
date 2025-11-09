@@ -2,7 +2,9 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAuthenticatedUser } from "@/lib/auth";
-import { requireWorkspaceRole } from "@/lib/rbac";
+import { authService } from "@/lib/authorization-service";
+import { ApiResponse } from "@/lib/api-response";
+import { ActivityLogger } from "@/lib/activity-logger";
 
 const CreateTaskSchema = z.object({
 	title: z.string().min(1),
@@ -16,25 +18,22 @@ const CreateTaskSchema = z.object({
 
 export async function POST(req: NextRequest) {
 	const user = await getAuthenticatedUser();
-	if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+	if (!user) return ApiResponse.unauthorized();
 
 	try {
 		const data = CreateTaskSchema.parse(await req.json());
 		const project = await prisma.project.findUnique({ where: { id: data.projectId } });
-		if (!project) return new Response(JSON.stringify({ error: "Project not found" }), { status: 404 });
+		if (!project) return ApiResponse.notFound("Project");
 
-		// Only OWNER/ADMIN can create tasks
-		const workspace = await prisma.workspace.findUnique({ where: { id: project.workspaceId } });
-		const isOwner = workspace?.ownerId === user.id;
-		
-		if (!isOwner) {
-			const allowed = await requireWorkspaceRole(user.id, project.workspaceId, ["OWNER", "ADMIN"]);
-			if (!allowed) return new Response(JSON.stringify({ error: "Only workspace owners and admins can create tasks" }), { status: 403 });
+		// Check authorization using service
+		const access = await authService.checkWorkspaceAccess(user.id, project.workspaceId, ["OWNER", "ADMIN"]);
+		if (!access.allowed) {
+			return ApiResponse.forbidden("Only workspace owners and admins can create tasks");
 		}
 
 		if (data.assigneeId) {
 			const isMember = await prisma.workspaceMember.findUnique({ where: { userId_workspaceId: { userId: data.assigneeId, workspaceId: project.workspaceId } } });
-			if (!isMember) return new Response(JSON.stringify({ error: "Assignee must be a workspace member" }), { status: 400 });
+			if (!isMember) return ApiResponse.badRequest("Assignee must be a workspace member");
 		}
 
 		const task = await prisma.$transaction(async (tx) => {
@@ -53,34 +52,32 @@ export async function POST(req: NextRequest) {
 			// touch project updatedAt
 			await tx.project.update({ where: { id: data.projectId }, data: { updatedAt: new Date() } });
 
-			await tx.activity.create({
-				data: {
-					action: "created_task",
-					targetType: "task",
-					targetId: created.id,
-					workspaceId: project.workspaceId,
-					projectId: data.projectId,
-					userId: user.id,
-					metadata: { taskTitle: created.title, status: created.status },
-				},
-			});
+			// Log activity
+			await ActivityLogger.logTaskActivity(
+				"created_task",
+				created.id,
+				data.projectId,
+				project.workspaceId,
+				user.id,
+				{ taskTitle: created.title, status: created.status }
+			);
 
 			return created;
 		});
 
-		return new Response(JSON.stringify({ task }), { status: 201 });
+		return ApiResponse.created({ task });
 	} catch (err) {
-		if (err instanceof z.ZodError) return new Response(JSON.stringify({ error: err.flatten() }), { status: 400 });
+		if (err instanceof z.ZodError) return ApiResponse.validationError(err.flatten());
 		console.error("Task creation error:", err);
 		// Return more detailed error in development
 		const errorMessage = err instanceof Error ? err.message : "Internal Server Error";
-		return new Response(JSON.stringify({ error: errorMessage, details: err instanceof Error ? err.stack : undefined }), { status: 500 });
+		return ApiResponse.error(errorMessage);
 	}
 }
 
 export async function GET(req: NextRequest) {
 	const user = await getAuthenticatedUser();
-	if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+	if (!user) return ApiResponse.unauthorized();
 
 	const { searchParams } = new URL(req.url);
 	const projectId = searchParams.get("projectId");
@@ -91,18 +88,15 @@ export async function GET(req: NextRequest) {
 	const limit = Math.min(Number(searchParams.get("limit") || 20), 100);
 	const offset = Number(searchParams.get("offset") || 0);
 
-	if (!projectId) return new Response(JSON.stringify({ error: "projectId required" }), { status: 400 });
+	if (!projectId) return ApiResponse.badRequest("projectId required");
 
 	const project = await prisma.project.findUnique({ where: { id: projectId } });
-	if (!project) return new Response(JSON.stringify({ error: "Project not found" }), { status: 404 });
+	if (!project) return ApiResponse.notFound("Project");
 
-	// Check if user is owner or has proper role
-	const workspace = await prisma.workspace.findUnique({ where: { id: project.workspaceId } });
-	const isOwner = workspace?.ownerId === user.id;
-	
-	if (!isOwner) {
-		const allowed = await requireWorkspaceRole(user.id, project.workspaceId, ["OWNER", "ADMIN", "MEMBER", "VIEWER"]);
-		if (!allowed) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+	// Check authorization
+	const access = await authService.checkWorkspaceAccess(user.id, project.workspaceId, ["OWNER", "ADMIN", "MEMBER", "VIEWER"]);
+	if (!access.allowed) {
+		return ApiResponse.forbidden(access.reason);
 	}
 
 	const where: any = { projectId };
@@ -122,7 +116,7 @@ export async function GET(req: NextRequest) {
 		}),
 		prisma.task.count({ where }),
 	]);
-	return new Response(JSON.stringify({ items, total, limit, offset }), { status: 200 });
+	return ApiResponse.success({ items, total, limit, offset });
 }
 
 

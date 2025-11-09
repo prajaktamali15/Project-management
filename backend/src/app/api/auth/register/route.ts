@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/hash";
+import { ApiResponse } from "@/lib/api-response";
 
 const RegisterSchema = z.object({
   email: z.string().email(),
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
-      return new Response(JSON.stringify({ error: "Email already in use" }), { status: 409 });
+      return ApiResponse.error("Email already in use", 409);
     }
 
     const passwordHash = await hashPassword(password);
@@ -25,12 +26,12 @@ export async function POST(req: NextRequest) {
       select: { id: true, email: true, name: true, createdAt: true },
     });
 
-    return new Response(JSON.stringify({ user }), { status: 201 });
+    return ApiResponse.created({ user });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return new Response(JSON.stringify({ error: err.flatten() }), { status: 400 });
+      return ApiResponse.validationError(err.flatten());
     }
-    return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
+    return ApiResponse.error("Internal Server Error");
   }
 }
 

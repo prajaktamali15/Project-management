@@ -14,7 +14,6 @@ export default function ProjectsPage() {
 	async function load() {
     try {
         setLoading(true);
-        // Fetch projects across all accessible workspaces directly
         const data = await apiFetch<{ projects: Project[] }>("/api/projects");
         setProjects(data.projects);
         setError(null);
